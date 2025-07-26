@@ -17,6 +17,7 @@ C_STEAM_VENT = (217, 247, 255)
 C_PACKAGE = (255, 224, 102)
 C_DELIVERY = (126, 204, 126)
 C_TEXT = (255, 255, 255)
+C_DASH = (255, 255, 255, 128)
 
 # Physics
 P_ACC = 0.5 #       ACCELERATION
@@ -24,6 +25,9 @@ P_FRI = -0.12 #     FRICTION
 P_GRV = 0.8 #       GRAVITY
 P_JMP = -20 #       JUMP STRENGTH
 STEAM_VENT_STRENGTH = -30
+DASH_SPEED = 15
+DASH_DURATION = 150
+DASH_COOLDOWN = 500
 
 vec = pg.math.Vector2
 
@@ -37,7 +41,7 @@ class Player(pg.sprite.Sprite):
         self.image_default.fill(C_CHARACTER)
 
         self.image_carrying = pg.Surface((30, 40))
-        self.image_default.fill(C_CHARACTER)
+        self.image_carrying.fill(C_CHARACTER)
         pg.draw.rect(self.image_carrying, C_PACKAGE, (5, -10, 20, 20))
         
         self.image = self.image_default
@@ -49,6 +53,12 @@ class Player(pg.sprite.Sprite):
 
         self.has_package = False
 
+        self.direction = 1
+        self.dashing = False
+        self.dash_time = 0
+        self.can_dash = True
+        self.last_dash_time = 0
+
     def jump(self):
         self.rect.y += 1
         hits = pg.sprite.spritecollide(self, self.game.platforms, False)
@@ -57,15 +67,36 @@ class Player(pg.sprite.Sprite):
         if hits:
             self.vel.y = P_JMP
 
+    def dash(self):
+        now = pg.time.get_ticks()
+        if self.can_dash and now - self.last_dash_time > DASH_COOLDOWN:
+            self.dashing = True
+            self.dash_time = now
+            self.last_dash_time = now
+            self.vel = vec(self.direction*DASH_SPEED, 0)
+            self.can_dash = False
+
     def update(self):
+        now = pg.time.get_ticks()
+        if self.dashing:
+            if now - self.dash_time > DASH_DURATION:
+                self.dashing = False
+                self.vel.x = 0
+
+            self.pos += self.vel
+            self.rect.midbottom = self.pos
+            return
+
         self.image = self.image_carrying if self.has_package else self.image_default
 
         self.acc = vec(0, P_GRV)
         keys = pg.key.get_pressed()
         if keys[pg.K_LEFT] or keys[pg.K_a]:
             self.acc.x = -P_ACC
+            self.direction = -1
         if keys[pg.K_RIGHT] or keys[pg.K_d]:
             self.acc.x = P_ACC
+            self.direction = 1
 
         self.acc.x += self.vel.x*P_FRI 
         self.vel += self.acc
@@ -83,7 +114,6 @@ class Player(pg.sprite.Sprite):
 class Platform(pg.sprite.Sprite):
     def __init__(self, x, y, w, h):
         super().__init__()
-
         self.image = pg.Surface((w, h))
         self.image.fill(C_PLATFORM)
         self.rect = self.image.get_rect()
@@ -239,10 +269,16 @@ class Game():
 
             if event.type == pg.KEYDOWN:
                 if event.key in [pg.K_SPACE, pg.K_UP, pg.K_w]: self.player.jump()
+                if event.key in [pg.K_x, pg.K_LSHIFT]: self.player.dash()
 
     def draw(self):
         self.screen.fill(C_BACKGROUND)
         self.all_sprites.draw(self.screen)
+
+        if self.player.dashing:
+            dash_ghost = self.player.image.copy()
+            dash_ghost.fill(C_DASH, special_flags=pg.BLEND_RGBA_MULT)
+            self.screen.blit(dash_ghost, self.player.rect)
 
         score_text = self.font.render(f"Score: {self.score}", True, C_TEXT)
         self.screen.blit(score_text, (10, 10))
