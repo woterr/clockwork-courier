@@ -7,6 +7,10 @@ SCREEN_WIDTH = 800
 SCREEN_HEIGHT = 600
 FPS = 60
 TITLE = "The Clockwork Courier"
+SCALE_FACTOR = 3
+CHARACTER = "character_walk_idle.png"
+CHARACTER_BACKPACK = "character_walk_idle_backpack.png"
+BACKPACK = "backpack.png"
 
 # Colors
 C_BACKGROUND = (78, 59, 49)
@@ -21,7 +25,7 @@ C_DASH = (255, 255, 255, 128)
 
 # Physics
 P_ACC = 0.5 #       ACCELERATION
-P_FRI = -0.12 #     FRICTION
+P_FRI = -0.10 #     FRICTION
 P_GRV = 0.8 #       GRAVITY
 P_JMP = -20 #       JUMP STRENGTH
 STEAM_VENT_STRENGTH = -30
@@ -31,23 +35,30 @@ DASH_COOLDOWN = 500
 
 vec = pg.math.Vector2
 
+class Spritesheet:
+    def __init__(self, filename):
+        self.spritesheet = pg.image.load(filename).convert_alpha()
+
+    def get_image(self, x, y, width, height):
+        image = pg.Surface((width, height), pg.SRCALPHA)
+        image.blit(self.spritesheet, (0,0), (x, y, width, height))
+        image = pg.transform.scale(image, (width*SCALE_FACTOR, height*SCALE_FACTOR))
+        return image
+
 # PLAYER
 class Player(pg.sprite.Sprite):
     def __init__(self, game):
         super().__init__()
         self.game = game
 
-        self.image_default = pg.Surface((30, 40))
-        self.image_default.fill(C_CHARACTER)
-
-        self.image_carrying = pg.Surface((30, 40))
-        self.image_carrying.fill(C_CHARACTER)
-        pg.draw.rect(self.image_carrying, C_PACKAGE, (5, -10, 20, 20))
+        self.current_frame = 0
+        self.last_update = 0
+        self.load_images()
         
-        self.image = self.image_default
+        self.image = self.idle_frames[0]
         self.rect = self.image.get_rect()
 
-        self.pos = vec(SCREEN_WIDTH / 2, SCREEN_HEIGHT / 2)
+        self.pos = vec(50, SCREEN_HEIGHT - 50)
         self.vel = vec(0,0)
         self.acc = vec(0,0)
 
@@ -58,6 +69,53 @@ class Player(pg.sprite.Sprite):
         self.dash_time = 0
         self.can_dash = True
         self.last_dash_time = 0
+
+    def load_images(self):
+        """ Load all the animation frames from the sprite sheet. """
+        spritesheet_normal = Spritesheet(CHARACTER)
+        spritesheet_backpack = Spritesheet(CHARACTER_BACKPACK)
+        SPRITE_WIDTH = 22
+        SPRITE_HEIGHT = 30
+
+        self.idle_frames = [spritesheet_normal.get_image(0, 0, SPRITE_WIDTH, SPRITE_HEIGHT)]
+        self.walk_frames_r = [
+            spritesheet_normal.get_image(SPRITE_WIDTH * 1, 0, SPRITE_WIDTH, SPRITE_HEIGHT),
+            spritesheet_normal.get_image(SPRITE_WIDTH * 2, 0, SPRITE_WIDTH, SPRITE_HEIGHT)
+        ]
+        self.walk_frames_l = [pg.transform.flip(frame, True, False) for frame in self.walk_frames_r]
+
+        self.idle_frames_carrying = [spritesheet_backpack.get_image(0, 0, SPRITE_WIDTH, SPRITE_HEIGHT)]
+        self.idle_frames_carrying = [spritesheet_backpack.get_image(0, 0, SPRITE_WIDTH, SPRITE_HEIGHT)]
+        self.walk_frames_r_carrying = [
+            spritesheet_backpack.get_image(SPRITE_WIDTH * 1, 0, SPRITE_WIDTH, SPRITE_HEIGHT),
+            spritesheet_backpack.get_image(SPRITE_WIDTH * 2, 0, SPRITE_WIDTH, SPRITE_HEIGHT)
+        ]
+        self.walk_frames_l_carrying = [pg.transform.flip(frame, True, False) for frame in self.walk_frames_r_carrying]
+
+    def animate(self):
+        now = pg.time.get_ticks()
+        is_moving = abs(self.vel.x) > 0.1
+
+        if is_moving:
+            if now - self.last_update > 180:
+                self.last_update = now
+                self.current_frame = (self.current_frame + 1) % len(self.walk_frames_l)
+
+                if self.vel.x > 0:
+                    if self.has_package: self.image = self.walk_frames_r_carrying[self.current_frame]
+                    else: self.image = self.walk_frames_r[self.current_frame]
+                else:
+                    if self.has_package: self.image = self.walk_frames_l_carrying[self.current_frame]
+                    else: self.image = self.walk_frames_l[self.current_frame]
+
+        if not is_moving:
+            if self.has_package: self.image = self.idle_frames_carrying[0]
+            else: self.image = self.idle_frames[0]
+
+        bottom = self.rect.bottom
+        self.rect = self.image.get_rect()
+        self.rect.bottom = bottom
+        
 
     def jump(self):
         self.rect.y += 1
@@ -77,7 +135,9 @@ class Player(pg.sprite.Sprite):
             self.can_dash = False
 
     def update(self):
+        self.animate()
         now = pg.time.get_ticks()
+
         if self.dashing:
             if now - self.dash_time > DASH_DURATION:
                 self.dashing = False
@@ -87,7 +147,6 @@ class Player(pg.sprite.Sprite):
             self.rect.midbottom = self.pos
             return
 
-        self.image = self.image_carrying if self.has_package else self.image_default
 
         self.acc = vec(0, P_GRV)
         keys = pg.key.get_pressed()
@@ -147,8 +206,16 @@ class SteamVent(Platform):
 class Package(pg.sprite.Sprite):
     def __init__(self, pos):
         super().__init__()
-        self.image = pg.Surface((20, 20))
-        self.image.fill(C_PACKAGE)
+        try:
+            original_image = pg.image.load(BACKPACK).convert_alpha()
+            width = original_image.get_width()
+            height = original_image.get_height()
+            self.image = pg.transform.scale(original_image, (width*SCALE_FACTOR, height*SCALE_FACTOR))
+
+        except pg.error:
+            self.image = pg.Surface((20 * SCALE_FACTOR, 20 * SCALE_FACTOR))
+            self.image.fill(C_PACKAGE)
+
         self.rect = self.image.get_rect()
         self.rect.center = pos
 
