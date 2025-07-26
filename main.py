@@ -17,7 +17,8 @@ C_PLATFORM = (139, 91, 41)
 P_ACC = 0.5 #       ACCELERATION
 P_FRI = -0.12 #     FRICTION
 P_GRV = 0.8 #       GRAVITY
-P_JMP = -20 #       JUMP STRENGTH
+P_JMP = -15 #       JUMP STRENGTH
+STEAM_VENT_STRENGTH = -30
 
 vec = pg.math.Vector2
 
@@ -34,8 +35,6 @@ class Player(pg.sprite.Sprite):
         self.pos = vec(SCREEN_WIDTH / 2, SCREEN_HEIGHT / 2)
         self.vel = vec(0,0)
         self.acc = vec(0,0)
-
-        self.on_ground = False
 
     def jump(self):
         self.rect.y += 1
@@ -54,13 +53,8 @@ class Player(pg.sprite.Sprite):
         if keys[pg.K_RIGHT] or keys[pg.K_d]:
             self.acc.x = P_ACC
 
-        # Apply friction to slow down
-        self.acc.x += self.vel.x*P_FRI
-
-        # Update velocity based on acc
+        self.acc.x += self.vel.x*P_FRI 
         self.vel += self.acc
-        
-        # Update position based on velocity
         self.pos += self.vel + 0.5*(self.acc)
 
         # Prevent screen overflow
@@ -69,7 +63,6 @@ class Player(pg.sprite.Sprite):
         if self.pos.x < 0 + self.rect.width / 2:
             self.pos.x = 0 + self.rect.width / 2
 
-        
         self.rect.midbottom = self.pos
 
 
@@ -83,6 +76,19 @@ class Platform(pg.sprite.Sprite):
         self.rect.x = x
         self.rect.y = y
 
+class MovingPlatform(Platform):
+    def __init__(self, x, y, w, h, move_range):
+        super().__init__(x, y, w, h)
+        self.image.fill(C_PLATFORM)
+        self.move_range_start = x
+        self.move_range_end = x + move_range
+        self.speed = 2
+        self.vel = vec(self.speed, 0)
+
+    def update(self):
+        self.rect.x += self.vel.x
+        if self.rect.right > self.move_range_end or self.rect.left < self.move_range_start:
+            self.vel.x *= -1
 
 class Game():
     def __init__(self):
@@ -101,16 +107,15 @@ class Game():
         self.all_sprites.add(self.player)
 
         level_layout = [
-            (0, SCREEN_HEIGHT - 40, SCREEN_WIDTH, 40), # Ground floor
-            (200, SCREEN_HEIGHT - 200, 150, 20),      # Mid-level platform
-            (450, SCREEN_HEIGHT - 350, 200, 20),      # High platform
-            (50, 250, 100, 20)                        # Floating left platform
+            Platform(0, SCREEN_HEIGHT - 40, SCREEN_WIDTH, 40),
+            Platform(450, SCREEN_HEIGHT - 350, 200, 20),
+            Platform(50, 250, 100, 20),
+            MovingPlatform(200, SCREEN_HEIGHT - 150, 150, 20, 500) # x, y, w, h, move_range
         ]
 
-        for plat_data in level_layout:
-            p = Platform(*plat_data)
-            self.all_sprites.add(p)
-            self.platforms.add(p)
+        for plat in level_layout:
+            self.all_sprites.add(plat)
+            self.platforms.add(plat)
 
         self.run()
 
@@ -129,14 +134,14 @@ class Game():
         if self.player.vel.y > 0:
             hits = pg.sprite.spritecollide(self.player, self.platforms, False)
             if hits:
-                highest_platform = hits[0]
-                for hit in hits:
-                    if hit.rect.top > highest_platform.rect.top:
-                        highest_platform = hit
+                highest_platform = max(hits, key=lambda p: p.rect.top)
 
                 if self.player.pos.y < highest_platform.rect.bottom:
                     self.player.pos.y = highest_platform.rect.top + 1
                     self.player.vel.y = 0
+
+                    if isinstance(highest_platform, MovingPlatform):
+                        self.player.pos.x += highest_platform.vel.x
 
     def events(self):
         for event in pg.event.get():
