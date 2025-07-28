@@ -30,8 +30,8 @@ class Player(pg.sprite.Sprite):
         """ Load all the animation frames from the sprite sheet. """
         spritesheet_normal = Spritesheet(settings.CHARACTER)
         spritesheet_backpack = Spritesheet(settings.CHARACTER_BACKPACK)
-        SPRITE_WIDTH = 22
-        SPRITE_HEIGHT = 30
+        SPRITE_WIDTH = 18
+        SPRITE_HEIGHT = 24
 
         self.idle_frames = [spritesheet_normal.get_image(0, 0, SPRITE_WIDTH, SPRITE_HEIGHT)]
         self.walk_frames_r = [

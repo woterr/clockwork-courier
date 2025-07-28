@@ -10,6 +10,7 @@ from Sprites.package import Package
 from Sprites.delivery import DeliveryPoint
 
 class Game():
+
     def __init__(self):
         pg.init()
         self.screen = pg.display.set_mode((settings.SCREEN_WIDTH, settings.SCREEN_HEIGHT))

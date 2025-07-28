@@ -1,7 +1,7 @@
 import pygame as pg
 # Constants 
-SCREEN_WIDTH = 800
-SCREEN_HEIGHT = 600
+SCREEN_WIDTH = 1200
+SCREEN_HEIGHT = 800
 FPS = 60
 TITLE = "The Clockwork Courier"
 SCALE_FACTOR = 3
