@@ -1,7 +1,11 @@
+import pygame as pg
 import settings
-from Sprites.platform import Platform
 
-class SteamVent(Platform):
+class SteamVent(pg.sprite.Sprite):
     def __init__(self, x, y, w, h):
-        super().__init__(x, y, w, h)
-        self.image.fill(settings.C_STEAM_VENT)
+        super().__init__()
+        self.image = pg.Surface((w, h))
+        # Making the vent a visible color for debugging purposes
+        self.image.fill(settings.C_STEAM_VENT) 
+        self.rect = self.image.get_rect()
+        self.rect.topleft = (x, y)

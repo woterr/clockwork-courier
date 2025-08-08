@@ -1,6 +1,7 @@
 import pygame as pg
-import settings
+import json
 import random
+
 import settings
 from Sprites.player import Player
 from Sprites.platform import Platform, MovingPlatform
@@ -18,6 +19,75 @@ class Game():
         self.clock = pg.time.Clock()
         self.running = True
         self.font = pg.font.Font(None, 36)
+        self.level_data = self.load_level_data()
+        self.current_level_index = 0
+        self.background_image = None
+
+    def load_level_data(self):
+        try:
+            with open('levels.json', 'r') as f:
+                return json.load(f)
+        except FileNotFoundError:
+            print("ERROR: 'levels.json' not found. Make sure it's in the correct directory.")
+            self.running = False
+            return None
+        except json.JSONDecodeError:
+            print("ERROR: Could not parse levels.json. Check for syntax errors.")
+            self.running = False
+            return None
+
+    def load_level(self):
+        self.all_sprites.empty()
+        self.platforms.empty()
+        self.hazards.empty()
+        self.steam_vents.empty()
+        self.packages.empty()
+        self.delivery_points.empty()
+
+        self.all_sprites.add(self.player)
+
+        if not self.level_data or self.current_level_index >= len(self.level_data['levels']):
+            print("No more levels to load or level data is missing.")
+            self.playing = False
+            return 
+        
+        level = self.level_data['levels'][self.current_level_index]
+
+        try:
+            self.background_image = pg.image.load(level['background']).convert()
+            self.background_image = pg.transform.scale(self.background_image, (settings.SCREEN_WIDTH, settings.SCREEN_HEIGHT))
+        except (pg.error, FileNotFoundError) as e:
+            print(f"Warning: Could not load background '{level['background']}'. Error: {e}. Using solid color.")
+            self.background_image = None
+
+        for p in level.get('platforms', []):
+            plat = Platform(p['x'], p['y'], p['image'])
+            self.all_sprites.add(plat)
+            self.platforms.add(plat)
+
+        # Load moving platforms using image paths
+        for p in level.get('moving_platforms', []):
+            plat = MovingPlatform(p['x'], p['y'], p['image'], p['range'])
+            self.all_sprites.add(plat)
+            self.platforms.add(plat)
+
+        for h in level.get('hazards', []):
+            hazard = Hazard(h['x'], h['y'], h['w'], h['h'])
+            self.all_sprites.add(hazard)
+            self.hazards.add(hazard)
+
+        for v in level.get('steam_vents', []):
+            vent = SteamVent(v['x'], v['y'], v['w'], v['h'])
+            self.all_sprites.add(vent)
+            self.steam_vents.add(vent)
+
+
+        floor = pg.sprite.Sprite()
+        floor.rect = pg.Rect(0, settings.SCREEN_HEIGHT - 1, settings.SCREEN_WIDTH, 10)
+        self.platforms.add(floor)
+
+        self.spawn_points = level.get('spawn_points', [])
+        self.spawn_delivery()
 
     def new(self):
         self.score = 0
@@ -32,29 +102,18 @@ class Game():
         self.player = Player(self)
         self.all_sprites.add(self.player)
 
-        level_layout = [
-            Platform(0, settings.SCREEN_HEIGHT - 40, settings.SCREEN_WIDTH, 40),
-            Platform(450, settings.SCREEN_HEIGHT - 350, 200, 20),
-            Platform(50, 250, 100, 20),
-            MovingPlatform(200, settings.SCREEN_HEIGHT - 150, 150, 20, 200),
-            Hazard(500, settings.SCREEN_HEIGHT - 60, 100, 20),
-            SteamVent(100, settings.SCREEN_HEIGHT - 60, 40, 20)
-        ]
-
-        for item in level_layout:
-            self.all_sprites.add(item)
-            if isinstance(item, Hazard):
-                self.hazards.add(item)
-            elif isinstance(item, SteamVent):
-                self.steam_vents.add(item)
-            else:
-                self.platforms.add(item)
-
-        self.spawn_points = [
-            (100, 220), (550, settings.SCREEN_HEIGHT - 380), (300, settings.SCREEN_HEIGHT - 180)
-        ]
-        self.spawn_delivery()
+        self.load_level()
         self.run()
+
+    def advance_level(self):
+        self.current_level_index += 1
+        if self.current_level_index < len(self.level_data['levels']):
+            print(f"Advancing level {self.current_level_index + 1}")
+            self.player.pos = settings.vec(50, settings.SCREEN_HEIGHT - 50)
+            self.load_level()
+        else:
+            print("You beat all levels! Congratulations!")
+            self.playing = False
 
     def spawn_delivery(self):
         for item in self.packages: item.kill()
@@ -108,7 +167,8 @@ class Game():
             if delivery_hits:
                 self.player.has_package = False
                 self.score += 100
-                self.spawn_delivery()
+                self.advance_level()
+
 
     def events(self):
         for event in pg.event.get():
@@ -122,7 +182,11 @@ class Game():
                 if event.key in [pg.K_x, pg.K_LSHIFT]: self.player.dash()
 
     def draw(self):
-        self.screen.fill(settings.C_BACKGROUND)
+        if self.background_image:
+            self.screen.blit(self.background_image, (0,0))
+        else:
+            self.screen.fill(settings.C_BACKGROUND)
+            
         self.all_sprites.draw(self.screen)
 
         if self.player.dashing:
@@ -131,6 +195,10 @@ class Game():
             self.screen.blit(dash_ghost, self.player.rect)
 
         score_text = self.font.render(f"Score: {self.score}", True, settings.C_TEXT)
-        self.screen.blit(score_text, (10, 10))
+        level_name = self.level_data['levels'][self.current_level_index]['name']
+        level_text = self.font.render(level_name, True, settings.C_TEXT)
 
+        self.screen.blit(score_text, (10, 10))
+        self.screen.blit(level_text, (settings.SCREEN_WIDTH - level_text.get_width() - 10, 10))
+       
         pg.display.flip()
